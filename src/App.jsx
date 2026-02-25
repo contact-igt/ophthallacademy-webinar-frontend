@@ -9,10 +9,12 @@ import AgendaSection from './components/AgendaSection';
 import FaqSection from './components/FaqSection';
 import CtaSection from './components/CtaSection';
 import Footer from './components/Footer';
+import StickyFooterCard from './components/StickyFooterCard';
+import PsychologySection from './components/PsychologySection';
 
 const App = () => {
   return (
-    <div className="min-h-screen text-gray-800 flex flex-col" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+    <div className="min-h-screen text-slate-800 flex flex-col">
       {/* 1. Sticky Header */}
       <Header />
 
@@ -23,6 +25,9 @@ const App = () => {
 
         {/* 3. Overview / Article Section */}
         <OverviewSection />
+
+        {/* 3.1 Psychology Section */}
+        <PsychologySection />
 
         {/* 4. We Will Cover / Topics Section */}
         <TopicsSection />
@@ -48,6 +53,9 @@ const App = () => {
 
       {/* 11. Footer */}
       <Footer />
+
+      {/* 12. Sticky Webinar Ad Card */}
+      <StickyFooterCard />
     </div>
   );
 };

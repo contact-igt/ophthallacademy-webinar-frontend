@@ -1,113 +1,316 @@
-const HeroSection = () => {
-    return (
-        <section className="relative w-full bg-[#0c2b4d] overflow-hidden pt-12 lg:pt-24 pb-16 lg:pb-24">
-            {/* Background Layer */}
-            <div
-                className="absolute inset-0 bg-cover bg-center mix-blend-overlay opacity-40"
-                style={{
-                    backgroundImage:
-                        'url("https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=2000")',
-                }}
-            ></div>
-            <div className="absolute inset-0 bg-[#0c2b4d]/60 lg:bg-transparent mix-blend-multiply"></div>
+import { useState } from 'react';
+import { Calendar, Clock, Video, Ticket, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
+import PaymentSuccess from './PaymentSuccess';
+import PaymentFailure from './PaymentFailure';
 
-            {/* Content Wrapper */}
-            <div className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-8 flex flex-col lg:flex-row items-center justify-between gap-12">
-                {/* Left: Hero Content */}
-                <div className="w-full lg:w-[55%] text-white">
-                    <span className="text-[#f47920] font-bold tracking-wider uppercase text-sm mb-4 block">
-                        Join Our Webinar
-                    </span>
-                    <h1 className="text-4xl lg:text-5xl xl:text-5xl font-bold leading-tight mb-6 drop-shadow-md">
-                        How to Effectively Deliver a 24x7 Self Service Student Experience
+const details = [
+    { icon: <Calendar size={18} />, label: 'Date', value: 'March 14, 2024' },
+    { icon: <Clock size={18} />, label: 'Time', value: '3:00 PM – 5:00 PM IST' },
+    { icon: <Video size={18} />, label: 'Mode', value: 'Live Zoom Session' },
+    { icon: <Ticket size={18} />, label: 'Fee', value: '₹99 Only' },
+];
+
+const INITIAL = { name: '', email: '', phone: '' };
+const INITIAL_ERRORS = { name: '', email: '', phone: '' };
+
+/* ─── Validators ─── */
+const validate = (fields) => {
+    const errors = { name: '', email: '', phone: '' };
+    if (!fields.name.trim()) {
+        errors.name = 'Full name is required.';
+    } else if (fields.name.trim().length < 3) {
+        errors.name = 'Name must be at least 3 characters.';
+    }
+    if (!fields.email.trim()) {
+        errors.email = 'Email address is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) {
+        errors.email = 'Enter a valid email address.';
+    }
+    if (!fields.phone.trim()) {
+        errors.phone = 'WhatsApp number is required.';
+    } else if (!/^[6-9]\d{9}$/.test(fields.phone.replace(/\D/g, ''))) {
+        errors.phone = 'Enter a valid 10-digit Indian mobile number.';
+    }
+    return errors;
+};
+
+const hasErrors = (errors) => Object.values(errors).some(Boolean);
+
+/* ─── Load Razorpay Script ─── */
+const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+        if (document.getElementById('razorpay-script')) return resolve(true);
+        const script = document.createElement('script');
+        script.id = 'razorpay-script';
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+
+/* ─────────────────────────────── */
+const HeroSection = () => {
+    const [fields, setFields] = useState(INITIAL);
+    const [errors, setErrors] = useState(INITIAL_ERRORS);
+    const [loading, setLoading] = useState(false);
+    const [paymentStatus, setPaymentStatus] = useState(null); // null | 'success' | 'failure'
+    const [paymentData, setPaymentData] = useState(null);
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFields((p) => ({ ...p, [name]: value }));
+        // Clear error on change
+        if (errors[name]) setErrors((p) => ({ ...p, [name]: '' }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const errs = validate(fields);
+        if (hasErrors(errs)) {
+            setErrors(errs);
+            return;
+        }
+
+        setLoading(true);
+
+        const rzpKey = import.meta.env.VITE_TEST_RAZORPAY_KEY_ID;
+        if (!rzpKey) {
+            alert('Razorpay Key ID is missing. Please set VITE_TEST_RAZORPAY_KEY_ID in your .env file and restart the dev server.');
+            setLoading(false);
+            return;
+        }
+
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+            alert('Failed to load payment gateway. Please check your internet connection.');
+            setLoading(false);
+            return;
+        }
+
+        const options = {
+            key: import.meta.env.VITE_TEST_RAZORPAY_KEY_ID,
+            amount: 9900, // paise (₹99)
+            currency: 'INR',
+            name: 'Ophthall Academy',
+            description: 'Beyond Refraction — 12-Step Optometry Career Webinar',
+            image: '/ophthall-logo.png',
+            prefill: {
+                name: fields.name,
+                email: fields.email,
+                contact: fields.phone.replace(/\D/g, ''),
+            },
+            notes: {
+                name: fields.name,
+                email: fields.email,
+                phone: fields.phone,
+            },
+            theme: { color: '#0c2b4d' },
+            handler: (response) => {
+                // Payment successful
+                setPaymentData({
+                    name: fields.name,
+                    email: fields.email,
+                    paymentId: response.razorpay_payment_id,
+                    orderId: response.razorpay_order_id,
+                    transactionId: response.razorpay_payment_id,
+                });
+                setPaymentStatus('success');
+                setLoading(false);
+            },
+            modal: {
+                ondismiss: () => {
+                    setLoading(false);
+                },
+            },
+        };
+
+        try {
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', (response) => {
+                setPaymentData({
+                    name: fields.name,
+                    error: response.error.description,
+                });
+                setPaymentStatus('failure');
+                setLoading(false);
+            });
+            rzp.open();
+        } catch {
+            setLoading(false);
+            setPaymentStatus('failure');
+        }
+    };
+
+    const handleRetry = () => {
+        setPaymentStatus(null);
+        setPaymentData(null);
+        setLoading(false);
+    };
+
+    /* ─── Show success / failure pages ─── */
+    if (paymentStatus === 'success' && paymentData) {
+        return (
+            <PaymentSuccess
+                name={paymentData.name}
+                email={paymentData.email}
+                paymentId={paymentData.paymentId}
+                transactionId={paymentData.transactionId}
+            />
+        );
+    }
+    if (paymentStatus === 'failure') {
+        return <PaymentFailure name={paymentData?.name} onRetry={handleRetry} />;
+    }
+
+    /* ─── Main Hero ─── */
+    return (
+        <section className="relative w-full overflow-hidden bg-[#0c2b4d]">
+            {/* Background gradients */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0c2b4d] via-[#0a2540] to-[#002f42]"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_0%,_rgba(0,174,239,0.12),_transparent_60%)]"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_100%,_rgba(0,47,66,0.5),_transparent_50%)]"></div>
+
+            <div className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-10 py-16 lg:py-20 flex flex-col lg:flex-row items-start lg:items-center gap-14 lg:gap-16">
+
+                {/* ── Left Content ── */}
+                <div className="flex-1 min-w-0">
+                    <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white/80 text-xs font-medium tracking-wider uppercase px-4 py-1.5 rounded-full mb-7">
+                        <span className="w-1.5 h-1.5 bg-[#00AEEF] rounded-full animate-pulse"></span>
+                        Live Webinar · March 2024
+                    </div>
+
+                    <h1 className="text-4xl md:text-5xl lg:text-[52px] font-bold text-white leading-[1.12] tracking-tight mb-4">
+                        Beyond Refraction —
+                        <br />
+                        <span className="text-[#00AEEF]">The 12-Step Blueprint</span>
                     </h1>
-                    <p className="text-gray-200 text-lg mb-8 font-semibold drop-shadow-md">
-                        10 Aug 2026 | 2:00 pm
+                    <p className="text-lg text-white/70 font-medium mb-8 max-w-[480px] leading-relaxed">
+                        A practical guide to a profitable optometry career for students and fresh graduates.
                     </p>
 
-                    {/* Countdown */}
-                    <div className="glass-panel inline-block rounded-xl p-6 shadow-lg">
-                        <p className="text-sm font-semibold mb-4 tracking-wide text-white text-center">
-                            Webinar Starts In
-                        </p>
-                        <div className="flex gap-4">
-                            {[
-                                { value: '12', label: 'Days' },
-                                { value: '08', label: 'Hours' },
-                                { value: '45', label: 'Minutes' },
-                            ].map((item) => (
-                                <div
-                                    key={item.label}
-                                    className="bg-white rounded px-5 py-3 text-center text-[#0c2b4d] min-w-[80px]"
-                                >
-                                    <span className="block text-2xl font-bold">{item.value}</span>
-                                    <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">
-                                        {item.label}
-                                    </span>
+                    <div className="w-10 h-0.5 bg-[#f47920] mb-8 rounded-full"></div>
+
+                    {/* Detail pills */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-10">
+                        {details.map((d, i) => (
+                            <div key={i} className="flex items-center gap-3.5 bg-white/[0.06] border border-white/[0.1] rounded-xl px-4 py-3.5">
+                                <span className="text-[#00AEEF] shrink-0">{d.icon}</span>
+                                <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-0.5">{d.label}</p>
+                                    <p className="text-sm font-semibold text-white">{d.value}</p>
                                 </div>
-                            ))}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex items-start gap-3 text-white/60">
+                        <CheckCircle2 size={16} className="text-[#00AEEF] shrink-0 mt-0.5" />
+                        <p className="text-sm leading-relaxed">
+                            Less than the cost of a textbook — but could transform how you approach your first OPD.
+                        </p>
+                    </div>
+                </div>
+
+                {/* ── Right: Registration Card ── */}
+                <div id="register" className="w-full lg:w-[400px] shrink-0">
+                    <div className="bg-white rounded-2xl shadow-2xl shadow-black/30 overflow-hidden">
+
+                        {/* Card header */}
+                        <div className="bg-gradient-to-r from-[#0c2b4d] to-[#002f42] px-7 py-5">
+                            <p className="text-xs font-semibold uppercase tracking-widest text-white/60 mb-1">Limited Seats Available</p>
+                            <h2 className="text-xl font-bold text-white">Reserve Your Spot</h2>
+                        </div>
+
+                        {/* Card body */}
+                        <div className="px-7 py-6">
+                            <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+
+                                {/* Full Name */}
+                                <Field
+                                    label="Full Name"
+                                    name="name"
+                                    type="text"
+                                    placeholder="Dr. Firstname Lastname"
+                                    value={fields.name}
+                                    error={errors.name}
+                                    onChange={handleChange}
+                                />
+
+                                {/* Email */}
+                                <Field
+                                    label="Email Address"
+                                    name="email"
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    value={fields.email}
+                                    error={errors.email}
+                                    onChange={handleChange}
+                                />
+
+                                {/* Phone */}
+                                <Field
+                                    label="WhatsApp Number"
+                                    name="phone"
+                                    type="tel"
+                                    placeholder="9XXXXXXXXX"
+                                    value={fields.phone}
+                                    error={errors.phone}
+                                    onChange={handleChange}
+                                />
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full flex items-center justify-center gap-2 bg-[#f47920] hover:bg-[#e06710] disabled:opacity-70 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-lg transition-all mt-2 shadow-md shadow-orange-300/30"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Opening Payment...
+                                        </>
+                                    ) : (
+                                        <>
+                                            Pay ₹99 & Confirm Seat
+                                            <ChevronRight size={16} />
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+
+                            <div className="mt-5 pt-4 border-t border-slate-100 text-center">
+                                <p className="text-xs text-slate-500">
+                                    One-time fee: <span className="font-bold text-[#0c2b4d]">₹99</span> · Secured by Razorpay 🔒
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Right: Registration Form Card */}
-                <div
-                    id="register"
-                    className="w-full lg:w-[400px] bg-white rounded-2xl shadow-2xl p-8 shrink-0 relative z-20 scroll-mt-24"
-                >
-                    <div className="relative">
-                        <div className="absolute -top-6 -left-4 text-8xl text-orange-50 font-serif font-bold opacity-50 pointer-events-none">
-                            Q
-                        </div>
-                        <h3 className="text-2xl font-bold text-center text-[#0c2b4d] mb-8 relative z-10">
-                            Register Now
-                        </h3>
-                    </div>
-
-                    <form className="space-y-5 relative z-10">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1.5">Your Name *</label>
-                            <input
-                                type="text"
-                                className="w-full bg-gray-100/80 border-none rounded-lg px-4 py-3.5 text-sm focus:ring-2 focus:ring-[#f47920] outline-none transition-shadow"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1.5">Your Email *</label>
-                            <input
-                                type="email"
-                                className="w-full bg-gray-100/80 border-none rounded-lg px-4 py-3.5 text-sm focus:ring-2 focus:ring-[#f47920] outline-none transition-shadow"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1.5">Phone Number *</label>
-                            <input
-                                type="tel"
-                                className="w-full bg-gray-100/80 border-none rounded-lg px-4 py-3.5 text-sm focus:ring-2 focus:ring-[#f47920] outline-none transition-shadow"
-                            />
-                        </div>
-
-                        <button
-                            type="button"
-                            className="w-full bg-[#f47920] hover:bg-[#e06b18] text-white font-bold py-4 rounded-full transition-colors mt-2 shadow-lg shadow-orange-500/30"
-                        >
-                            Save My Spot
-                        </button>
-
-                        <div className="text-center pt-6 mt-4">
-                            <span className="text-xs font-bold text-gray-500 block mb-3">I can't make it</span>
-                            <button
-                                type="button"
-                                className="text-sm font-bold text-[#f47920] hover:text-white hover:bg-[#f47920] border-2 border-gray-100 rounded-full py-3 px-8 transition-all shadow-sm w-full"
-                            >
-                                Send Me A Recording
-                            </button>
-                        </div>
-                    </form>
-                </div>
             </div>
         </section>
     );
 };
+
+/* ─── Reusable input field ─── */
+const Field = ({ label, name, type, placeholder, value, error, onChange }) => (
+    <div>
+        <label className="block text-xs font-semibold text-[#0c2b4d] uppercase tracking-wider mb-1.5">
+            {label} <span className="text-red-400">*</span>
+        </label>
+        <input
+            name={name}
+            type={type}
+            placeholder={placeholder}
+            value={value}
+            onChange={onChange}
+            className={`w-full border rounded-lg px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all bg-slate-50 focus:bg-white
+                ${error
+                    ? 'border-red-400 focus:border-red-400 focus:ring-red-200'
+                    : 'border-slate-200 focus:border-[#0c2b4d] focus:ring-[#0c2b4d]/10'
+                }`}
+        />
+        {error && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">{error}</p>}
+    </div>
+);
 
 export default HeroSection;
