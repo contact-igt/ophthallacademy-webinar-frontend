@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, Clock, Video, Ticket, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
 import PaymentSuccess from './PaymentSuccess';
 import PaymentFailure from './PaymentFailure';
+import api from '../helpers/api';
 
 const details = [
-    { icon: <Calendar size={18} />, label: 'Date', value: 'March 14, 2024' },
+    { icon: <Calendar size={18} />, label: 'Date', value: 'May 30, 2026' },
     { icon: <Clock size={18} />, label: 'Time', value: '3:00 PM – 5:00 PM IST' },
     { icon: <Video size={18} />, label: 'Mode', value: 'Live Zoom Session' },
     { icon: <Ticket size={18} />, label: 'Fee', value: '₹99 Only' },
@@ -55,6 +56,27 @@ const HeroSection = () => {
     const [loading, setLoading] = useState(false);
     const [paymentStatus, setPaymentStatus] = useState(null); // null | 'success' | 'failure'
     const [paymentData, setPaymentData] = useState(null);
+    const [utms, setUtms] = useState({ source: '', medium: '', campaign: '', term: '', content: '' });
+    const [ipAddress, setIpAddress] = useState('');
+
+    // Capture UTMs and IP on mount
+    import.meta.env.SSR || useEffect(() => {
+        // 1. UTMs
+        const params = new URLSearchParams(window.location.search);
+        setUtms({
+            source: params.get('utm_source') || '',
+            medium: params.get('utm_medium') || '',
+            campaign: params.get('utm_campaign') || '',
+            term: params.get('utm_term') || '',
+            content: params.get('utm_content') || '',
+        });
+
+        // 2. IP Address
+        fetch('https://api.ipify.org?format=json')
+            .then(res => res.json())
+            .then(data => setIpAddress(data.ip))
+            .catch(() => { }); // Silent fail for IP
+    }, []);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -73,58 +95,124 @@ const HeroSection = () => {
 
         setLoading(true);
 
-        const rzpKey = import.meta.env.VITE_TEST_RAZORPAY_KEY_ID;
-        if (!rzpKey) {
-            alert('Razorpay Key ID is missing. Please set VITE_TEST_RAZORPAY_KEY_ID in your .env file and restart the dev server.');
-            setLoading(false);
-            return;
-        }
+        try {
+            const loaded = await loadRazorpayScript();
+            if (!loaded) {
+                throw new Error('Failed to load payment gateway. Please check your internet connection.');
+            }
 
-        const loaded = await loadRazorpayScript();
-        if (!loaded) {
-            alert('Failed to load payment gateway. Please check your internet connection.');
-            setLoading(false);
-            return;
-        }
+            const mobile = fields.phone.replace(/\D/g, '');
+            const tracking = {
+                ip_address: ipAddress || undefined,
+                utm_source: utms.source || undefined,
+                utm_medium: utms.medium || undefined,
+                utm_campaign: utms.campaign || undefined,
+                utm_term: utms.term || undefined,
+                utm_content: utms.content || undefined,
+            };
 
-        const options = {
-            key: import.meta.env.VITE_TEST_RAZORPAY_KEY_ID,
-            amount: 9900, // paise (₹99)
-            currency: 'INR',
-            name: 'Ophthall Academy',
-            description: 'Beyond Refraction — 12-Step Optometry Career Webinar',
-            image: '/ophthall-logo.png',
-            prefill: {
+            // 1. Create Order via Backend API
+            const { data: orderData } = await api.post('/ophthall-webinar/create-order', {
                 name: fields.name,
                 email: fields.email,
-                contact: fields.phone.replace(/\D/g, ''),
-            },
-            notes: {
-                name: fields.name,
-                email: fields.email,
-                phone: fields.phone,
-            },
-            theme: { color: '#0c2b4d' },
-            handler: (response) => {
-                // Payment successful
-                setPaymentData({
+                mobile,
+                programm_date: '2026-05-30',
+                ...tracking
+            });
+
+            const { order_id, key_id } = orderData;
+
+            // 2. Open Razorpay Checkout
+            const options = {
+                key: key_id || import.meta.env.VITE_TEST_RAZORPAY_KEY_ID,
+                amount: orderData.amount, // already in paise from backend
+                currency: orderData.currency || 'INR',
+                name: 'Ophthall Academy',
+                description: 'Beyond Refraction — 12-Step Optometry Career Webinar',
+                image: '/ophthall-logo.png',
+                order_id: order_id,
+                prefill: {
                     name: fields.name,
                     email: fields.email,
-                    paymentId: response.razorpay_payment_id,
-                    orderId: response.razorpay_order_id,
-                    transactionId: response.razorpay_payment_id,
-                });
-                setPaymentStatus('success');
-                setLoading(false);
-            },
-            modal: {
-                ondismiss: () => {
-                    setLoading(false);
+                    contact: fields.phone.replace(/\D/g, ''),
                 },
-            },
-        };
+                theme: { color: '#0c2b4d' },
+                handler: async (response) => {
+                    setLoading(true); // Keep loading while registering
+                    try {
+                        // 3. Register after successful payment
+                        await api.post('/ophthall-webinar/create', {
+                            name: fields.name,
+                            email: fields.email,
+                            mobile,
+                            amount: 117,
+                            payment_status: 'paid',
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            captured: true,
+                            programm_date: '2026-05-30',
+                            page_name: 'ophthall_webinar_page',
+                            ...tracking
+                        });
 
-        try {
+                        // 4. Backup to Google Sheets
+                        const sheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL;
+                        if (sheetsUrl) {
+                            const now = new Date();
+                            const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                            fetch(sheetsUrl, {
+                                method: 'POST',
+                                mode: 'no-cors', // Avoid CORS issues with GAS
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    name: fields.name,
+                                    email: fields.email,
+                                    mobile,
+                                    amount: 117,
+                                    registered_date: formattedDate,
+                                    programm_date: '2026-05-30',
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_signature: response.razorpay_signature,
+                                    payment_status: 'paid',
+                                    captured: 1,
+                                    ip_address: ipAddress || 'unknown',
+                                    utm_source: utms.source || '',
+                                    utm_medium: utms.medium || '',
+                                    utm_campaign: utms.campaign || '',
+                                    utm_term: utms.term || '',
+                                    utm_content: utms.content || '',
+                                    created_at: formattedDate,
+                                    updated_at: formattedDate,
+                                }),
+                            }).catch(err => console.error('Google Sheets Error:', err));
+                        }
+
+                        // Payment & Registration successful
+                        setPaymentData({
+                            name: fields.name,
+                            email: fields.email,
+                            paymentId: response.razorpay_payment_id,
+                            orderId: response.razorpay_order_id,
+                            transactionId: response.razorpay_payment_id,
+                        });
+                        setPaymentStatus('success');
+                    } catch (err) {
+                        alert(err.message);
+                        setPaymentStatus('failure');
+                    } finally {
+                        setLoading(false);
+                    }
+                },
+                modal: {
+                    ondismiss: () => {
+                        setLoading(false);
+                    },
+                },
+            };
+
             const rzp = new window.Razorpay(options);
             rzp.on('payment.failed', (response) => {
                 setPaymentData({
@@ -135,7 +223,9 @@ const HeroSection = () => {
                 setLoading(false);
             });
             rzp.open();
-        } catch {
+
+        } catch (error) {
+            alert(error.message);
             setLoading(false);
             setPaymentStatus('failure');
         }
@@ -176,7 +266,7 @@ const HeroSection = () => {
                 <div className="flex-1 min-w-0">
                     <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white/80 text-xs font-medium tracking-wider uppercase px-4 py-1.5 rounded-full mb-7">
                         <span className="w-1.5 h-1.5 bg-[#00AEEF] rounded-full animate-pulse"></span>
-                        Live Webinar · March 2024
+                        Live Webinar · May 2026
                     </div>
 
                     <h1 className="text-4xl md:text-5xl lg:text-[52px] font-bold text-white leading-[1.12] tracking-tight mb-4">
