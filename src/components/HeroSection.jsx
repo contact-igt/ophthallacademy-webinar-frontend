@@ -124,7 +124,7 @@ const HeroSection = () => {
 
             // 2. Open Razorpay Checkout
             const options = {
-                key: key_id || import.meta.env.VITE_TEST_RAZORPAY_KEY_ID,
+                key: key_id || import.meta.env.VITE_RAZORPAY_KEY_ID,
                 amount: orderData.amount, // already in paise from backend
                 currency: orderData.currency || 'INR',
                 name: 'Ophthall Academy',
