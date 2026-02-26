@@ -15,11 +15,32 @@ const getBaseURL = () => {
     return import.meta.env.VITE_DEVELOPMENT_API_URL;
 };
 
+const baseURL = getBaseURL();
+console.log('[API] Base URL resolved to:', baseURL);
+
 const api = axios.create({
-    baseURL: getBaseURL(),
+    baseURL,
     headers: {
-        'Content-Type': 'application/json',
-    },
+        'Content-Type': 'application/json',    },
+});
+
+
+
+// Debug interceptors — remove after testing
+api.interceptors.request.use((config) => {
+    console.log(`[API] → ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`, config.data);
+    return config;
+}, (error) => {
+    console.error('[API] Request error:', error);
+    return Promise.reject(error);
+});
+
+api.interceptors.response.use((response) => {
+    console.log(`[API] ← ${response.status}`, response.data);
+    return response;
+}, (error) => {
+    console.error('[API] Response error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
 });
 
 export default api;
