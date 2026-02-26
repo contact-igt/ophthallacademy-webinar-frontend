@@ -138,10 +138,12 @@ const HeroSection = () => {
                 },
                 theme: { color: '#0c2b4d' },
                 handler: async (response) => {
+                    console.log('[Razorpay] Payment success callback triggered!', response);
                     setLoading(true); // Keep loading while registering
                     try {
+                        console.log('[Razorpay] Calling backend /create endpoint with data...');
                         // 3. Register after successful payment
-                        await api.post('/ophthall-webinar/create', {
+                        const createRes = await api.post('/ophthall-webinar/create', {
                             name: fields.name,
                             email: fields.email,
                             mobile,
@@ -155,10 +157,12 @@ const HeroSection = () => {
                             page_name: 'ophthall_webinar_page',
                             ...tracking
                         });
+                        console.log('[Razorpay] Backend registration success:', createRes.data);
 
                         // 4. Backup to Google Sheets
                         const sheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL;
                         if (sheetsUrl) {
+                            console.log('[Razorpay] Sending data to Google Sheets...');
                             const now = new Date();
                             const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -187,9 +191,13 @@ const HeroSection = () => {
                                     created_at: formattedDate,
                                     updated_at: formattedDate,
                                 }),
-                            }).catch(err => console.error('Google Sheets Error:', err));
+                            }).then(() => console.log('[Razorpay] Google Sheets backup triggered.'))
+                                .catch(err => console.error('[Razorpay] Google Sheets Error:', err));
+                        } else {
+                            console.log('[Razorpay] No Google Sheets URL found in env.');
                         }
 
+                        console.log('[Razorpay] Setting success state...');
                         // Payment & Registration successful
                         setPaymentData({
                             name: fields.name,
@@ -199,22 +207,42 @@ const HeroSection = () => {
                             transactionId: response.razorpay_payment_id,
                         });
                         setPaymentStatus('success');
+                        console.log('[Razorpay] Success state set! Should render PaymentSuccess component now.');
                     } catch (err) {
-                        alert(err.message);
+                        console.error('[Razorpay] Error in success handler:', err);
+                        // Prevent alert from blocking the UI, instead pass the error message to the failure screen
+                        setPaymentData({
+                            name: fields.name,
+                            error: 'Payment succeeded but registration failed. Please contact support.',
+                        });
                         setPaymentStatus('failure');
                     } finally {
                         setLoading(false);
+                        console.log('[Razorpay] Handler finally block executed. Loading set to false.');
                     }
                 },
                 modal: {
                     ondismiss: () => {
+                        console.log('[Razorpay] Modal dismissed by user');
                         setLoading(false);
                     },
                 },
             };
 
+            const rzpKey = key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
+            if (!rzpKey) {
+                console.error('[Razorpay] No Razorpay key found! Ensure VITE_RAZORPAY_KEY_ID is set in Vercel environment variables.');
+                setPaymentData({ name: fields.name, error: 'Payment gateway configuration error.' });
+                setPaymentStatus('failure');
+                setLoading(false);
+                return;
+            }
+
+            options.key = rzpKey;
+
             const rzp = new window.Razorpay(options);
             rzp.on('payment.failed', (response) => {
+                console.error('[Razorpay] Payment failed:', response.error);
                 setPaymentData({
                     name: fields.name,
                     error: response.error.description,
@@ -225,7 +253,8 @@ const HeroSection = () => {
             rzp.open();
 
         } catch (error) {
-            alert(error.message);
+            console.error('[Razorpay] Setup Error:', error);
+            setPaymentData({ name: fields.name, error: 'Could not connect to payment gateway.' });
             setLoading(false);
             setPaymentStatus('failure');
         }

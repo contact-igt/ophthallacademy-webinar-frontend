@@ -9,10 +9,10 @@ const getBaseURL = () => {
     const port = (import.meta.env.VITE_SERVER_PORT || '').trim().toLowerCase();
 
     if (port === 'local') {
-        return import.meta.env.VITE_LOCALHOST_API_URL;
+        return import.meta.env.VITE_LOCALHOST_API_URL || "/api/v1";
     }
 
-    return import.meta.env.VITE_DEVELOPMENT_API_URL;
+    return import.meta.env.VITE_DEVELOPMENT_API_URL || "https://stageapi.invictusglobaltech.com/api/v1";
 };
 
 const baseURL = getBaseURL();
@@ -21,7 +21,8 @@ console.log('[API] Base URL resolved to:', baseURL);
 const api = axios.create({
     baseURL,
     headers: {
-        'Content-Type': 'application/json',    },
+        'Content-Type': 'application/json',
+    },
 });
 
 
