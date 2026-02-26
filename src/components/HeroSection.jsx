@@ -139,93 +139,79 @@ const HeroSection = () => {
                 theme: { color: '#0c2b4d' },
                 handler: async (response) => {
                     console.log('[Razorpay] Payment success callback triggered!', response);
-                    setLoading(true); // Keep loading while registering
-                    try {
-                        console.log('[Razorpay] Calling backend /create endpoint with data...');
-                        // 3. Register after successful payment
-                        const createRes = await api.post('/ophthall-webinar/create', {
-                            name: fields.name,
-                            email: fields.email,
-                            mobile,
-                            amount: 117,
-                            payment_status: 'paid',
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_signature: response.razorpay_signature,
-                            captured: true,
-                            programm_date: '2026-05-30',
-                            page_name: 'ophthall_webinar_page',
-                            ...tracking
-                        });
-                        console.log('[Razorpay] Backend registration success:', createRes.data);
+                    setLoading(true);
 
-                        // 4. Backup to Google Sheets
-                        const sheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL;
-                        if (sheetsUrl) {
-                            console.log('[Razorpay] Sending data to Google Sheets...');
-                            const now = new Date();
-                            const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    // Payment actually succeeded here. Update UI immediately so it never gets stuck.
+                    // The webhook will handle data consistency even if the frontend API calls below fail.
+                    setPaymentData({
+                        name: fields.name,
+                        email: fields.email,
+                        paymentId: response.razorpay_payment_id,
+                        orderId: response.razorpay_order_id,
+                        transactionId: response.razorpay_payment_id,
+                    });
+                    setPaymentStatus('success');
 
-                            fetch(sheetsUrl, {
-                                method: 'POST',
-                                mode: 'no-cors', // Avoid CORS issues with GAS
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    name: fields.name,
-                                    email: fields.email,
-                                    mobile,
-                                    amount: 117,
-                                    registered_date: formattedDate,
-                                    programm_date: '2026-05-30',
-                                    razorpay_order_id: response.razorpay_order_id,
-                                    razorpay_payment_id: response.razorpay_payment_id,
-                                    razorpay_signature: response.razorpay_signature,
-                                    payment_status: 'paid',
-                                    captured: 1,
-                                    ip_address: ipAddress || 'unknown',
-                                    utm_source: utms.source || '',
-                                    utm_medium: utms.medium || '',
-                                    utm_campaign: utms.campaign || '',
-                                    utm_term: utms.term || '',
-                                    utm_content: utms.content || '',
-                                    created_at: formattedDate,
-                                    updated_at: formattedDate,
-                                }),
-                            }).then(() => console.log('[Razorpay] Google Sheets backup triggered.'))
-                                .catch(err => console.error('[Razorpay] Google Sheets Error:', err));
-                        } else {
-                            console.log('[Razorpay] No Google Sheets URL found in env.');
-                        }
+                    // Fire and forget frontend registration (do not block UI)
+                    api.post('/ophthall-webinar/create', {
+                        name: fields.name,
+                        email: fields.email,
+                        mobile,
+                        amount: 117,
+                        payment_status: 'paid',
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature: response.razorpay_signature,
+                        captured: true,
+                        programm_date: '2026-05-30',
+                        page_name: 'ophthall_webinar_page',
+                        ...tracking
+                    }).then(() => console.log('[Razorpay] Backend registration success'))
+                        .catch(err => console.error('[Razorpay] Backend registration error (webhook will retry):', err));
 
-                        console.log('[Razorpay] Setting success state...');
-                        // Payment & Registration successful
-                        setPaymentData({
-                            name: fields.name,
-                            email: fields.email,
-                            paymentId: response.razorpay_payment_id,
-                            orderId: response.razorpay_order_id,
-                            transactionId: response.razorpay_payment_id,
-                        });
-                        setPaymentStatus('success');
-                        console.log('[Razorpay] Success state set! Should render PaymentSuccess component now.');
-                    } catch (err) {
-                        console.error('[Razorpay] Error in success handler:', err);
-                        // Prevent alert from blocking the UI, instead pass the error message to the failure screen
-                        setPaymentData({
-                            name: fields.name,
-                            error: 'Payment succeeded but registration failed. Please contact support.',
-                        });
-                        setPaymentStatus('failure');
-                    } finally {
-                        setLoading(false);
-                        console.log('[Razorpay] Handler finally block executed. Loading set to false.');
+                    // Fire and forget Google Sheets backup
+                    const sheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL;
+                    if (sheetsUrl) {
+                        const now = new Date();
+                        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                        fetch(sheetsUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: fields.name,
+                                email: fields.email,
+                                mobile,
+                                amount: 117,
+                                registered_date: formattedDate,
+                                programm_date: '2026-05-30',
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                payment_status: 'paid',
+                                captured: 1,
+                                ip_address: ipAddress || 'unknown',
+                                ...tracking,
+                                created_at: formattedDate,
+                                updated_at: formattedDate,
+                            }),
+                        }).then(() => console.log('[Razorpay] Google Sheets backup triggered.'))
+                            .catch(err => console.error('[Razorpay] Google Sheets Error:', err));
                     }
+
+                    setLoading(false);
                 },
                 modal: {
                     ondismiss: () => {
-                        console.log('[Razorpay] Modal dismissed by user');
+                        console.log('[Razorpay] Modal dismissed by user or closed unexpectedly.');
                         setLoading(false);
                     },
+                    onerror: (error) => {
+                        console.error('[Razorpay] Internal Modal Error:', error);
+                        setPaymentData({ name: fields.name, error: error.description || 'Payment window closed unexpectedly.' });
+                        setPaymentStatus('failure');
+                        setLoading(false);
+                    }
                 },
             };
 
