@@ -47,7 +47,7 @@ const StickyFooterCard = () => {
                                 </p>
                                 <div className="flex items-center gap-3 mt-0.5">
                                     <span className="flex items-center gap-1 text-white/50 text-[11px]">
-                                        <Calendar size={10} className="text-[#00AEEF]" /> Mar 14, 2024
+                                        <Calendar size={10} className="text-[#00AEEF]" /> May 30, 2026
                                     </span>
                                     <span className="flex items-center gap-1 text-white/50 text-[11px]">
                                         <Clock size={10} className="text-[#00AEEF]" /> 3–5 PM IST
