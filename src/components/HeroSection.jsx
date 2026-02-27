@@ -165,7 +165,7 @@ const HeroSection = () => {
                         name: fields.name,
                         email: fields.email,
                         mobile,
-                        amount: orderData.amount,
+                        amount: orderData.amount / 100, // Convert Paise to Rupees for backend
                         payment_status: 'paid',
                         razorpay_order_id: response.razorpay_order_id,
                         razorpay_payment_id: response.razorpay_payment_id,
@@ -189,7 +189,7 @@ const HeroSection = () => {
                                 name: fields.name,
                                 email: fields.email,
                                 mobile,
-                                amount: orderData.amount,
+                                amount: orderData.amount / 100, // Convert Paise to Rupees for sheets
                                 registered_date: formattedDate,
                                 programm_date: '2026-05-30',
                                 razorpay_order_id: response.razorpay_order_id,
@@ -220,6 +220,21 @@ const HeroSection = () => {
                                     transactionId: statusData.razorpay_payment_id || 'captured',
                                 });
                                 setPaymentStatus('success');
+
+                                // Trigger registration in background if not already done
+                                WebinarService.registerUser({
+                                    name: fields.name,
+                                    email: fields.email,
+                                    mobile,
+                                    amount: orderData.amount / 100,
+                                    payment_status: 'paid',
+                                    razorpay_order_id: order_id,
+                                    razorpay_payment_id: statusData.razorpay_payment_id || 'captured',
+                                    captured: true,
+                                    programm_date: '2026-05-30',
+                                    page_name: 'ophthall_webinar_page',
+                                    ...tracking
+                                }).catch(() => { });
                             }
                         } catch (err) {
                             // Ignore error, just proceed to stop loading
