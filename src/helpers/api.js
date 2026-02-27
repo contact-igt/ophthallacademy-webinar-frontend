@@ -17,14 +17,14 @@ export const _axios = async (
 
     // Default fallback URLs based on environment: Default to PRODUCTION for safety
     let APIURL;
-    
+
     if (port === 'local') {
         APIURL = import.meta.env.VITE_LOCALHOST_API_URL || "http://localhost:8000/api/v1";
     } else if (port === 'development') {
         APIURL = import.meta.env.VITE_DEVELOPMENT_API_URL || "https://stageapi.invictusglobaltech.com/api/v1";
     } else {
         // Fallback or explicit 'production'
-        APIURL = import.meta.env.VITE_PRODUCTION_API_URL || "https://api.invictusglobaltech.com/api/v1";
+        APIURL = import.meta.env.VITE_PRODUCTION_API_URL || "";
     }
 
     const endpoint = `${APIURL}${url}`;
