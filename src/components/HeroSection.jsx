@@ -5,10 +5,10 @@ import PaymentFailure from './PaymentFailure';
 import { WebinarService } from '../services/webinarService';
 
 const details = [
-    { icon: <Calendar size={18} />, label: 'Date', value: 'May 30, 2026' },
+    { icon: <Calendar size={18} />, label: 'Date', value: 'Mar 14, 2026' },
     { icon: <Clock size={18} />, label: 'Time', value: '3:00 PM – 5:00 PM IST' },
     { icon: <Video size={18} />, label: 'Mode', value: 'Live Zoom Session' },
-    { icon: <Ticket size={18} />, label: 'Fee', value: '₹99 Only' },
+    { icon: <Ticket size={18} className="text-[#f47920]" />, label: 'Fee', value: <span className="text-[#f47920] font-bold">₹99 Only</span> },
 ];
 
 const INITIAL = { name: '', email: '', phone: '' };
@@ -116,11 +116,15 @@ const HeroSection = () => {
                 name: fields.name,
                 email: fields.email,
                 mobile,
-                programm_date: '2026-05-30',
+                programm_date: '2026-03-14',
                 ...tracking
             });
 
             const { order_id, key_id } = orderData;
+
+            if (!order_id) {
+                throw new Error('Order creation failed on the server. Please try again.');
+            }
 
             // 2. Validate key before opening Razorpay
             const rzpKey = key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
@@ -172,7 +176,7 @@ const HeroSection = () => {
                         razorpay_payment_id: response.razorpay_payment_id,
                         razorpay_signature: response.razorpay_signature,
                         captured: true,
-                        programm_date: '2026-05-30',
+                        programm_date: '2026-03-14',
                         ...tracking
                     }).catch(() => { });
                 },
@@ -210,11 +214,13 @@ const HeroSection = () => {
 
             // 4. Background Polling Rescue
             pollInterval = setInterval(async () => {
-                console.log('[Polling] Checking order status for rescue...');
                 try {
                     const statusData = await WebinarService.checkOrderStatus(order_id);
-                    if (statusData && (statusData.status === 'paid' || statusData.payment_status === 'paid')) {
-                        console.log('[Polling] 🎯 Rescue Triggered: Payment detected as PAID');
+                    console.log(`[Polling] Current Status for ${order_id}:`, statusData?.status || statusData?.payment_status || 'unknown');
+
+                    const currentStatus = (statusData?.status || statusData?.payment_status || '').toLowerCase();
+                    if (currentStatus === 'paid' || currentStatus === 'success' || currentStatus === 'captured') {
+                        console.log('[Polling] 🎯 Rescue Triggered: Payment verified as PAID');
                         clearInterval(pollInterval);
                         setPaymentData({
                             name: fields.name,
@@ -226,6 +232,20 @@ const HeroSection = () => {
                         setPaymentStatus('success');
                         setLoading(false);
                         rzp.close();
+
+                        // Ensure registration is triggered in rescue flow
+                        WebinarService.registerUser({
+                            name: fields.name,
+                            email: fields.email,
+                            mobile,
+                            amount: orderData.amount / 100,
+                            payment_status: 'paid',
+                            razorpay_order_id: order_id,
+                            razorpay_payment_id: statusData.razorpay_payment_id || 'captured',
+                            captured: true,
+                            programm_date: '2026-03-14',
+                            ...tracking
+                        }).catch(() => { });
                     }
                 } catch (e) { }
             }, 5000);
@@ -276,7 +296,7 @@ const HeroSection = () => {
                 <div className="flex-1 min-w-0">
                     <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white/80 text-xs font-medium tracking-wider uppercase px-4 py-1.5 rounded-full mb-7">
                         <span className="w-1.5 h-1.5 bg-[#00AEEF] rounded-full animate-pulse"></span>
-                        Live Webinar · May 2026
+                        Live Webinar · Mar 2026
                     </div>
 
                     <h1 className="text-4xl md:text-5xl lg:text-[52px] font-bold text-white leading-[1.12] tracking-tight mb-4">
@@ -285,7 +305,7 @@ const HeroSection = () => {
                         <span className="text-[#00AEEF]">The 12-Step Blueprint</span>
                     </h1>
                     <p className="text-lg text-white/70 font-medium mb-8 max-w-[480px] leading-relaxed">
-                        A practical guide to a profitable optometry career for students and fresh graduates.
+                        A practical guide to a profitable optometry career for practising optometrists, faculties, students and fresh graduates.
                     </p>
 
                     <div className="w-10 h-0.5 bg-[#f47920] mb-8 rounded-full"></div>
@@ -379,7 +399,7 @@ const HeroSection = () => {
 
                             <div className="mt-5 pt-4 border-t border-slate-100 text-center">
                                 <p className="text-xs text-slate-500">
-                                    One-time fee: <span className="font-bold text-[#0c2b4d]">₹99</span> · Secured by Razorpay 🔒
+                                    One-time fee: <span className="text-xl font-black text-[#f47920] ml-1 mr-1">₹99</span> · Secured by Razorpay 🔒
                                 </p>
                             </div>
                         </div>
