@@ -24,7 +24,7 @@ export const _axios = async (
         APIURL = import.meta.env.VITE_DEVELOPMENT_API_URL || "https://stageapi.invictusglobaltech.com/api/v1";
     } else {
         // Fallback or explicit 'production'
-        APIURL = import.meta.env.VITE_PRODUCTION_API_URL || "";
+        APIURL = import.meta.env.VITE_PRODUCTION_API_URL || "https://api.invictusglobaltech.com/api/v1";
     }
 
     const endpoint = `${APIURL}${url}`;
