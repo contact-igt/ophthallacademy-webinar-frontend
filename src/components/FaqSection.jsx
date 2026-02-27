@@ -14,7 +14,7 @@ const faqs = [
     },
     {
         q: `Is this suitable for beginners?`,
-        a: `Yes. This webinar is specifically designed for optometry students, fresh graduates, and young practitioners looking to bridge the gap between academic theory and real OPD practice.`,
+        a: `Yes. This webinar is specifically designed for practicing optometrists, faculties, students, and fresh graduates looking to bridge the gap between academic theory and clinical success.`,
         tag: 'Eligibility',
     },
     {

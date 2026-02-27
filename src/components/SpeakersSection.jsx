@@ -1,3 +1,5 @@
+import anujaImg from '../assets/anuja.png';
+
 const SpeakersSection = () => (
     <section id="speakers" className="section bg-white border-t border-slate-100">
         <div className="container-lg">
@@ -16,9 +18,9 @@ const SpeakersSection = () => (
                 {/* Image */}
                 <div className="md:w-2/5 shrink-0 min-h-[280px] relative overflow-hidden bg-slate-100">
                     <img
-                        src="https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&q=80&w=600"
+                        src={anujaImg}
                         alt="Dr. Anuja R. Singh"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover object-top"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0c2b4d]/50 to-transparent"></div>
                 </div>

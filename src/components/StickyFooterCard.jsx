@@ -47,7 +47,7 @@ const StickyFooterCard = () => {
                                 </p>
                                 <div className="flex items-center gap-3 mt-0.5">
                                     <span className="flex items-center gap-1 text-white/50 text-[11px]">
-                                        <Calendar size={10} className="text-[#00AEEF]" /> May 30, 2026
+                                        <Calendar size={10} className="text-[#00AEEF]" /> Mar 14, 2026
                                     </span>
                                     <span className="flex items-center gap-1 text-white/50 text-[11px]">
                                         <Clock size={10} className="text-[#00AEEF]" /> 3–5 PM IST
@@ -62,8 +62,8 @@ const StickyFooterCard = () => {
                         {/* Right: price + CTA + dismiss */}
                         <div className="flex items-center gap-3 shrink-0">
                             <div className="hidden md:block text-right">
-                                <p className="text-white/40 text-[10px] uppercase tracking-widest">One-time fee</p>
-                                <p className="text-white font-bold text-base leading-tight">₹99 Only</p>
+                                <p className="text-[#00AEEF] text-[10px] uppercase tracking-widest font-bold">One-time fee</p>
+                                <p className="text-[20px] font-black text-[#f47920] leading-tight">₹99 Only</p>
                             </div>
                             <a
                                 href="#register"

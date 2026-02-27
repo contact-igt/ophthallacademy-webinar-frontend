@@ -45,12 +45,12 @@ export const _axios = async (
             url: endpoint,
             data: body,
             params: params,
+            timeout: 15000, // 15s timeout to prevent hanging forever
         });
         return res.data;
     } catch (err) {
-        if (import.meta.env.DEV) {
-            console.error('[API] Request failed:', err);
-        }
+        // Log basic error info even in production to help debugging "stuck" issues
+        console.error(`[API Error] ${method} ${url}:`, err.message || 'Request failed');
         throw err;
     }
 };

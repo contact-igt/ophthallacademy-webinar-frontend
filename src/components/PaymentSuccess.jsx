@@ -33,7 +33,7 @@ const PaymentSuccess = ({ name, email, transactionId, paymentId }) => {
                             </p>
                             <div className="flex flex-wrap gap-4 mt-1">
                                 <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                                    <Calendar size={12} className="text-[#00AEEF]" /> May 30, 2026
+                                    <Calendar size={12} className="text-[#00AEEF]" /> March 14, 2026
                                 </span>
                                 <span className="flex items-center gap-1.5 text-xs text-slate-500">
                                     <Clock size={12} className="text-[#00AEEF]" /> 3:00 – 5:00 PM IST
@@ -57,7 +57,7 @@ const PaymentSuccess = ({ name, email, transactionId, paymentId }) => {
 
                         {/* Note */}
                         <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
-                            📬 <strong>Check your email</strong> — the Zoom link and event details will be sent to <span className="font-semibold">{email}</span> before May 30.
+                            📬 <strong>Check your email</strong> — the Zoom link and event details will be sent to <span className="font-semibold">{email}</span> before March 14.
                         </div>
 
                         {/* Footer logos */}

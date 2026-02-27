@@ -4,7 +4,7 @@ const questions = [
     { q: `Will I be able to handle real patients on day one?`, tag: 'Confidence' },
     { q: `What does a real hospital OPD day actually look like?`, tag: 'Awareness' },
     { q: `How do I make clinical decisions without a textbook?`, tag: 'Decision-Making' },
-    { q: `What do hospitals expect from fresh optometry graduates?`, tag: 'Job Readiness' },
+    { q: `What are the key differentiators for success in modern optometry practice?`, tag: 'Success Blueprint' },
     { q: `How do I build strong patient interaction confidence?`, tag: 'Communication' },
     { q: `What career pathways should I explore right now?`, tag: 'Career Planning' },
 ];
@@ -24,8 +24,8 @@ const PsychologySection = () => (
                         Questions Every Optometry Student Quietly Asks
                     </h2>
                     <p className="body-text max-w-md">
-                        These aren't trivial doubts. They're the real concerns that hold fresh graduates
-                        back from stepping confidently into clinical practice.
+                        These aren't trivial doubts. They're the real concerns that hold practitioners
+                        back from stepping confidently into a highly profitable clinical career.
                     </p>
                 </div>
 

@@ -22,8 +22,8 @@ const CtaSection = () => (
                     <p className="text-lg text-white/65 font-normal mb-10 max-w-[560px] mx-auto leading-relaxed">
                         Designed to help optometry students and practitioners bridge the gap between academic learning and real-world clinical practice.
                     </p>
-                    <a href="#register" className="btn-primary text-base px-10 py-4">
-                        Yes, I'm Joining — ₹99 Only
+                    <a href="#register" className="btn-primary text-base px-10 py-4 shadow-xl shadow-orange-500/30">
+                        Yes, I'm Joining — <span className="font-black ml-1">₹99 Only</span>
                         <ChevronRight size={17} />
                     </a>
                 </div>
