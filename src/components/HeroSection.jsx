@@ -111,7 +111,7 @@ const HeroSection = () => {
                 utm_content: utms.content || undefined,
             };
 
-            // 1. Create Order via Backend API utilizing our new Service
+            // 1. Create Order via Backend API
             const orderData = await WebinarService.createOrder({
                 name: fields.name,
                 email: fields.email,
@@ -131,10 +131,12 @@ const HeroSection = () => {
                 return;
             }
 
+            let pollInterval = null;
+
             // 3. Open Razorpay Checkout
             const options = {
                 key: rzpKey,
-                amount: orderData.amount, // already in paise from backend
+                amount: orderData.amount,
                 currency: orderData.currency || 'INR',
                 name: 'Ophthall Academy',
                 description: 'Beyond Refraction — 12-Step Optometry Career Webinar',
@@ -147,8 +149,8 @@ const HeroSection = () => {
                 },
                 theme: { color: '#0c2b4d' },
                 handler: async (response) => {
-
-                    // ✅ STEP 1: Immediately show success UI — never let user get stuck
+                    console.log('[Razorpay] ✅ Payment Success Handler Triggered', response);
+                    if (pollInterval) clearInterval(pollInterval);
                     setPaymentData({
                         name: fields.name,
                         email: fields.email,
@@ -159,56 +161,24 @@ const HeroSection = () => {
                     setPaymentStatus('success');
                     setLoading(false);
 
-                    // ✅ STEP 2: Fire and forget — register in backend (non-blocking)
-                    // Even if this fails, the Razorpay webhook will handle the DB update
+                    // Fire and forget registration
                     WebinarService.registerUser({
                         name: fields.name,
                         email: fields.email,
                         mobile,
-                        amount: orderData.amount / 100, // Convert Paise to Rupees for backend
+                        amount: orderData.amount / 100,
                         payment_status: 'paid',
                         razorpay_order_id: response.razorpay_order_id,
                         razorpay_payment_id: response.razorpay_payment_id,
                         razorpay_signature: response.razorpay_signature,
                         captured: true,
                         programm_date: '2026-05-30',
-                        page_name: 'ophthall_webinar_page',
                         ...tracking
                     }).catch(() => { });
-
-                    // ✅ STEP 3: Fire and forget — Google Sheets backup (non-blocking)
-                    const sheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL;
-                    if (sheetsUrl) {
-                        const now = new Date();
-                        const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                        fetch(sheetsUrl, {
-                            method: 'POST',
-                            mode: 'no-cors',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                name: fields.name,
-                                email: fields.email,
-                                mobile,
-                                amount: orderData.amount / 100, // Convert Paise to Rupees for sheets
-                                registered_date: formattedDate,
-                                programm_date: '2026-05-30',
-                                razorpay_order_id: response.razorpay_order_id,
-                                razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_signature: response.razorpay_signature,
-                                payment_status: 'paid',
-                                captured: 1,
-                                ip_address: ipAddress || 'unknown',
-                                ...tracking,
-                                created_at: formattedDate,
-                                updated_at: formattedDate,
-                            }),
-                        }).catch(() => { });
-                    }
                 },
                 modal: {
                     ondismiss: async () => {
-                        // For QR code payments, the handler might not be called immediately.
-                        // Check order status on dismiss to see if payment was actually successful.
+                        if (pollInterval) clearInterval(pollInterval);
                         try {
                             const statusData = await WebinarService.checkOrderStatus(order_id);
                             if (statusData && (statusData.status === 'paid' || statusData.payment_status === 'paid')) {
@@ -220,45 +190,48 @@ const HeroSection = () => {
                                     transactionId: statusData.razorpay_payment_id || 'captured',
                                 });
                                 setPaymentStatus('success');
-
-                                // Trigger registration in background if not already done
-                                WebinarService.registerUser({
-                                    name: fields.name,
-                                    email: fields.email,
-                                    mobile,
-                                    amount: orderData.amount / 100,
-                                    payment_status: 'paid',
-                                    razorpay_order_id: order_id,
-                                    razorpay_payment_id: statusData.razorpay_payment_id || 'captured',
-                                    captured: true,
-                                    programm_date: '2026-05-30',
-                                    page_name: 'ophthall_webinar_page',
-                                    ...tracking
-                                }).catch(() => { });
                             }
-                        } catch (err) {
-                            // Ignore error, just proceed to stop loading
-                        } finally {
+                        } catch (err) { } finally {
                             setLoading(false);
                         }
                     },
-                    onerror: (error) => {
-                        setPaymentData({ name: fields.name, error: error.description || 'Payment window closed unexpectedly.' });
-                        setPaymentStatus('failure');
-                        setLoading(false);
-                    }
                 },
             };
 
             const rzp = new window.Razorpay(options);
+
             rzp.on('payment.failed', (response) => {
-                setPaymentData({
-                    name: fields.name,
-                    error: response.error.description,
-                });
+                console.error('[Razorpay] ❌ Payment Failed Event:', response.error);
+                if (pollInterval) clearInterval(pollInterval);
+                setPaymentData({ name: fields.name, error: response.error.description });
                 setPaymentStatus('failure');
                 setLoading(false);
             });
+
+            // 4. Background Polling Rescue
+            pollInterval = setInterval(async () => {
+                console.log('[Polling] Checking order status for rescue...');
+                try {
+                    const statusData = await WebinarService.checkOrderStatus(order_id);
+                    if (statusData && (statusData.status === 'paid' || statusData.payment_status === 'paid')) {
+                        console.log('[Polling] 🎯 Rescue Triggered: Payment detected as PAID');
+                        clearInterval(pollInterval);
+                        setPaymentData({
+                            name: fields.name,
+                            email: fields.email,
+                            paymentId: statusData.razorpay_payment_id || 'captured',
+                            orderId: order_id,
+                            transactionId: statusData.razorpay_payment_id || 'captured',
+                        });
+                        setPaymentStatus('success');
+                        setLoading(false);
+                        rzp.close();
+                    }
+                } catch (e) { }
+            }, 5000);
+
+            setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 180000);
+
             rzp.open();
 
         } catch (error) {
