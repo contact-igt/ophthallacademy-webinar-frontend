@@ -1,47 +1,58 @@
+/* eslint-disable no-useless-catch */
 import axios from 'axios';
 
 /**
- * Resolves the API base URL based on VITE_SERVER_PORT:
- *  - "local"  → VITE_LOCALHOST_API_URL  (ngrok / local tunnel)
- *  - otherwise → VITE_DEVELOPMENT_API_URL (staging server)
+ * Enhanced API Wrapper (Admin Page Style)
+ * Standardizes headers, dynamically resolves the base URL, and unifies error handling.
  */
-const getBaseURL = () => {
+export const _axios = async (
+    method = 'GET',
+    url = '',
+    body = null,
+    contentType = 'application/json',
+    params = null,
+) => {
+    // 1. Resolve Dynamic API URL
     const port = (import.meta.env.VITE_SERVER_PORT || '').trim().toLowerCase();
 
+    // Default fallback URLs based on environment: Default to PRODUCTION for safety
+    let APIURL;
+
     if (port === 'local') {
-        return import.meta.env.VITE_LOCALHOST_API_URL || "/api/v1";
+        APIURL = import.meta.env.VITE_LOCALHOST_API_URL || "http://localhost:8000/api/v1";
+    } else if (port === 'development') {
+        APIURL = import.meta.env.VITE_DEVELOPMENT_API_URL || "https://stageapi.invictusglobaltech.com/api/v1";
+    } else {
+        // Fallback or explicit 'production'
+        APIURL = import.meta.env.VITE_PRODUCTION_API_URL || "";
     }
 
-    return import.meta.env.VITE_DEVELOPMENT_API_URL || "https://stageapi.invictusglobaltech.com/api/v1";
+    const endpoint = `${APIURL}${url}`;
+
+    // 2. Token strategy setup (Not used in public frontend currently, but structured)
+    const token = null;
+
+    // 3. Body formatting correctly handling form data
+    const isFormData = body instanceof FormData;
+
+    try {
+        const res = await axios({
+            headers: {
+                ...(isFormData ? {} : { 'Content-Type': contentType }),
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            method: method,
+            url: endpoint,
+            data: body,
+            params: params,
+        });
+        return res.data;
+    } catch (err) {
+        if (import.meta.env.DEV) {
+            console.error('[API] Request failed:', err);
+        }
+        throw err;
+    }
 };
 
-const baseURL = getBaseURL();
-console.log('[API] Base URL resolved to:', baseURL);
-
-const api = axios.create({
-    baseURL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
-
-
-
-// Debug interceptors — remove after testing
-api.interceptors.request.use((config) => {
-    console.log(`[API] → ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`, config.data);
-    return config;
-}, (error) => {
-    console.error('[API] Request error:', error);
-    return Promise.reject(error);
-});
-
-api.interceptors.response.use((response) => {
-    console.log(`[API] ← ${response.status}`, response.data);
-    return response;
-}, (error) => {
-    console.error('[API] Response error:', error.response?.status, error.response?.data || error.message);
-    return Promise.reject(error);
-});
-
-export default api;
+export default _axios;

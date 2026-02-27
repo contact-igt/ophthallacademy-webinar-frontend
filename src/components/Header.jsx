@@ -20,7 +20,7 @@ const Header = () => {
                 <div className="max-w-[1200px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-6">
 
                     {/* Logo */}
-                    <a href="#" className="flex items-center shrink-0">
+                    <a href="/" className="flex items-center shrink-0">
                         <img src={logo} alt="Ophthall Academy" className="h-10 w-auto object-contain" />
                     </a>
 
