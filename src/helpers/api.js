@@ -1,9 +1,23 @@
 /* eslint-disable no-useless-catch */
 import axios from 'axios';
 
+// 1. Resolve Base URL once at load time
+const getBaseUrl = () => {
+    const env = (import.meta.env.VITE_SERVER_PORT || 'production').trim().toLowerCase();
+
+    const urls = {
+        local: import.meta.env.VITE_LOCALHOST_API_URL,
+        development: import.meta.env.VITE_DEVELOPMENT_API_URL,
+        production: import.meta.env.VITE_PRODUCTION_API_URL
+    };
+
+    return urls[env] || urls.production || "https://api.invictusglobaltech.com/api/v1";
+};
+
+const BASE_URL = getBaseUrl();
+
 /**
- * Enhanced API Wrapper (Admin Page Style)
- * Standardizes headers, dynamically resolves the base URL, and unifies error handling.
+ * Standardized API Wrapper
  */
 export const _axios = async (
     method = 'GET',
@@ -12,45 +26,24 @@ export const _axios = async (
     contentType = 'application/json',
     params = null,
 ) => {
-    // 1. Resolve Dynamic API URL
-    const port = (import.meta.env.VITE_SERVER_PORT || '').trim().toLowerCase();
-
-    // Default fallback URLs based on environment: Default to PRODUCTION for safety
-    let APIURL;
-
-    if (port === 'local') {
-        APIURL = import.meta.env.VITE_LOCALHOST_API_URL || "http://localhost:8000/api/v1";
-    } else if (port === 'development') {
-        APIURL = import.meta.env.VITE_DEVELOPMENT_API_URL || "https://stageapi.invictusglobaltech.com/api/v1";
-    } else {
-        // Fallback or explicit 'production'
-        APIURL = import.meta.env.VITE_PRODUCTION_API_URL || "https://api.invictusglobaltech.com/api/v1";
-    }
-
-    const endpoint = `${APIURL}${url}`;
-
-    // 2. Token strategy setup (Not used in public frontend currently, but structured)
-    const token = null;
-
-    // 3. Body formatting correctly handling form data
-    const isFormData = body instanceof FormData;
-
     try {
-        const res = await axios({
+        const isFormData = body instanceof FormData;
+
+        const config = {
+            method,
+            url: `${BASE_URL}${url}`,
+            data: body,
+            params,
             headers: {
                 ...(isFormData ? {} : { 'Content-Type': contentType }),
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
-            method: method,
-            url: endpoint,
-            data: body,
-            params: params,
-            timeout: 15000, // 15s timeout to prevent hanging forever
-        });
-        return res.data;
+            timeout: 20000, // Slightly longer 20s timeout
+        };
+
+        const response = await axios(config);
+        return response.data;
     } catch (err) {
-        // Log basic error info even in production to help debugging "stuck" issues
-        console.error(`[API Error] ${method} ${url}:`, err.message || 'Request failed');
+        console.error(`[API Error] ${method} ${url}:`, err.response?.data?.message || err.message);
         throw err;
     }
 };

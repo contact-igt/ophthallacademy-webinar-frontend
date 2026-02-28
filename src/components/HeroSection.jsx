@@ -37,107 +37,70 @@ const validate = (fields) => {
 
 const hasErrors = (errors) => Object.values(errors).some(Boolean);
 
-/* ─── Load Razorpay Script ─── */
-const loadRazorpayScript = () =>
-    new Promise((resolve) => {
-        if (document.getElementById('razorpay-script')) return resolve(true);
-        const script = document.createElement('script');
-        script.id = 'razorpay-script';
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.onload = () => resolve(true);
-        script.onerror = () => resolve(false);
-        document.body.appendChild(script);
-    });
 
 /* ─────────────────────────────── */
 const HeroSection = () => {
     const [fields, setFields] = useState(INITIAL);
     const [errors, setErrors] = useState(INITIAL_ERRORS);
     const [loading, setLoading] = useState(false);
-    const [paymentStatus, setPaymentStatus] = useState(null); // null | 'success' | 'failure'
-    const [paymentData, setPaymentData] = useState(null);
-    const [utms, setUtms] = useState({ source: '', medium: '', campaign: '', term: '', content: '' });
-    const [ipAddress, setIpAddress] = useState('');
 
-    // Capture UTMs and IP on mount
-    import.meta.env.SSR || useEffect(() => {
-        // 1. UTMs
+    // Consolidated States
+    const [payment, setPayment] = useState({ status: null, data: null }); // status: 'success' | 'failure' | null
+    const [tracking, setTracking] = useState({ ip: '', utms: {} });
+
+    // Capture Tracking Data (UTMs & IP)
+    useEffect(() => {
+        if (import.meta.env.SSR) return;
+
         const params = new URLSearchParams(window.location.search);
-        setUtms({
-            source: params.get('utm_source') || '',
-            medium: params.get('utm_medium') || '',
-            campaign: params.get('utm_campaign') || '',
-            term: params.get('utm_term') || '',
-            content: params.get('utm_content') || '',
-        });
+        const utms = {
+            utm_source: params.get('utm_source') || undefined,
+            utm_medium: params.get('utm_medium') || undefined,
+            utm_campaign: params.get('utm_campaign') || undefined,
+            utm_term: params.get('utm_term') || undefined,
+            utm_content: params.get('utm_content') || undefined,
+        };
 
-        // 2. IP Address
+        setTracking(prev => ({ ...prev, utms }));
+
         fetch('https://api.ipify.org?format=json')
             .then(res => res.json())
-            .then(data => setIpAddress(data.ip))
-            .catch(() => { }); // Silent fail for IP
+            .then(data => setTracking(prev => ({ ...prev, ip: data.ip })))
+            .catch(() => { });
     }, []);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFields((p) => ({ ...p, [name]: value }));
-        // Clear error on change
-        if (errors[name]) setErrors((p) => ({ ...p, [name]: '' }));
+        setFields(p => ({ ...p, [name]: value }));
+        if (errors[name]) setErrors(p => ({ ...p, [name]: '' }));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         const errs = validate(fields);
-        if (hasErrors(errs)) {
-            setErrors(errs);
-            return;
-        }
+        if (hasErrors(errs)) return setErrors(errs);
 
         setLoading(true);
 
         try {
-            const loaded = await loadRazorpayScript();
-            if (!loaded) {
-                throw new Error('Failed to load payment gateway. Please check your internet connection.');
-            }
+            if (!window.Razorpay) throw new Error('Payment gateway is loading. Please try again.');
 
             const mobile = fields.phone.replace(/\D/g, '');
-            const tracking = {
-                ip_address: ipAddress || undefined,
-                utm_source: utms.source || undefined,
-                utm_medium: utms.medium || undefined,
-                utm_campaign: utms.campaign || undefined,
-                utm_term: utms.term || undefined,
-                utm_content: utms.content || undefined,
-            };
-
-            // 1. Create Order via Backend API
-            const orderData = await WebinarService.createOrder({
-                name: fields.name,
-                email: fields.email,
+            const payload = {
+                ...fields,
                 mobile,
                 programm_date: '2026-03-14',
-                ...tracking
-            });
+                ip_address: tracking.ip || undefined,
+                ...tracking.utms
+            };
 
-            const { order_id, key_id } = orderData;
+            // 1. Create Order
+            const orderData = await WebinarService.createOrder(payload);
+            const rzpKey = orderData.key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-            if (!order_id) {
-                throw new Error('Order creation failed on the server. Please try again.');
-            }
+            if (!orderData.order_id || !rzpKey) throw new Error('Payment initialization failed.');
 
-            // 2. Validate key before opening Razorpay
-            const rzpKey = key_id || import.meta.env.VITE_RAZORPAY_KEY_ID;
-            if (!rzpKey) {
-                setPaymentData({ name: fields.name, error: 'Payment gateway configuration error.' });
-                setPaymentStatus('failure');
-                setLoading(false);
-                return;
-            }
-
-            let pollInterval = null;
-
-            // 3. Open Razorpay Checkout
+            // 2. Open Razorpay
             const options = {
                 key: rzpKey,
                 amount: orderData.amount,
@@ -145,141 +108,64 @@ const HeroSection = () => {
                 name: 'Ophthall Academy',
                 description: 'Beyond Refraction — 12-Step Optometry Career Webinar',
                 image: '/ophthall-logo.png',
-                order_id: order_id,
-                prefill: {
-                    name: fields.name,
-                    email: fields.email,
-                    contact: fields.phone.replace(/\D/g, ''),
-                },
+                order_id: orderData.order_id,
+                prefill: { name: fields.name, email: fields.email, contact: mobile },
                 theme: { color: '#0c2b4d' },
                 handler: async (response) => {
-                    console.log('[Razorpay] ✅ Payment Success Handler Triggered', response);
-                    if (pollInterval) clearInterval(pollInterval);
-                    setPaymentData({
-                        name: fields.name,
-                        email: fields.email,
-                        paymentId: response.razorpay_payment_id,
-                        orderId: response.razorpay_order_id,
-                        transactionId: response.razorpay_payment_id,
-                    });
-                    setPaymentStatus('success');
-                    setLoading(false);
-
-                    // Fire and forget registration
-                    WebinarService.registerUser({
-                        name: fields.name,
-                        email: fields.email,
-                        mobile,
-                        amount: orderData.amount / 100,
-                        payment_status: 'paid',
-                        razorpay_order_id: response.razorpay_order_id,
-                        razorpay_payment_id: response.razorpay_payment_id,
-                        razorpay_signature: response.razorpay_signature,
-                        captured: true,
-                        programm_date: '2026-03-14',
-                        ...tracking
-                    }).catch(() => { });
-                },
-                modal: {
-                    ondismiss: async () => {
-                        if (pollInterval) clearInterval(pollInterval);
-                        try {
-                            const statusData = await WebinarService.checkOrderStatus(order_id);
-                            if (statusData && (statusData.status === 'paid' || statusData.payment_status === 'paid')) {
-                                setPaymentData({
-                                    name: fields.name,
-                                    email: fields.email,
-                                    paymentId: statusData.razorpay_payment_id || 'captured',
-                                    orderId: order_id,
-                                    transactionId: statusData.razorpay_payment_id || 'captured',
-                                });
-                                setPaymentStatus('success');
-                            }
-                        } catch (err) { } finally {
-                            setLoading(false);
-                        }
-                    },
-                },
-            };
-
-            const rzp = new window.Razorpay(options);
-
-            rzp.on('payment.failed', (response) => {
-                console.error('[Razorpay] ❌ Payment Failed Event:', response.error);
-                if (pollInterval) clearInterval(pollInterval);
-                setPaymentData({ name: fields.name, error: response.error.description });
-                setPaymentStatus('failure');
-                setLoading(false);
-            });
-
-            // 4. Background Polling Rescue
-            pollInterval = setInterval(async () => {
-                try {
-                    const statusData = await WebinarService.checkOrderStatus(order_id);
-                    console.log(`[Polling] Current Status for ${order_id}:`, statusData?.status || statusData?.payment_status || 'unknown');
-
-                    const currentStatus = (statusData?.status || statusData?.payment_status || '').toLowerCase();
-                    if (currentStatus === 'paid' || currentStatus === 'success' || currentStatus === 'captured') {
-                        console.log('[Polling] 🎯 Rescue Triggered: Payment verified as PAID');
-                        clearInterval(pollInterval);
-                        setPaymentData({
-                            name: fields.name,
-                            email: fields.email,
-                            paymentId: statusData.razorpay_payment_id || 'captured',
-                            orderId: order_id,
-                            transactionId: statusData.razorpay_payment_id || 'captured',
-                        });
-                        setPaymentStatus('success');
-                        setLoading(false);
-                        rzp.close();
-
-                        // Ensure registration is triggered in rescue flow
-                        WebinarService.registerUser({
-                            name: fields.name,
-                            email: fields.email,
-                            mobile,
+                    setLoading(true);
+                    try {
+                        const regPayload = {
+                            ...payload,
                             amount: orderData.amount / 100,
                             payment_status: 'paid',
-                            razorpay_order_id: order_id,
-                            razorpay_payment_id: statusData.razorpay_payment_id || 'captured',
-                            captured: true,
-                            programm_date: '2026-03-14',
-                            ...tracking
-                        }).catch(() => { });
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            captured: true
+                        };
+
+                        await WebinarService.registerUser(regPayload);
+
+                        setPayment({
+                            status: 'success',
+                            data: { ...fields, paymentId: response.razorpay_payment_id }
+                        });
+                    } catch (err) {
+                        console.error('Registration API Error (Payment was successful):', err);
+                        setPayment({ status: 'success', data: { ...fields, paymentId: response.razorpay_payment_id } });
+                    } finally {
+                        setLoading(false);
                     }
-                } catch (e) { }
-            }, 5000);
+                },
+                modal: { ondismiss: () => setLoading(false) },
+            };
 
-            setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 180000);
-
-            rzp.open();
+            new window.Razorpay(options).open();
 
         } catch (error) {
-            setPaymentData({ name: fields.name, error: error.message || 'Could not connect to payment gateway.' });
+            setPayment({ status: 'failure', data: { name: fields.name, error: error.message } });
             setLoading(false);
-            setPaymentStatus('failure');
         }
     };
 
     const handleRetry = () => {
-        setPaymentStatus(null);
-        setPaymentData(null);
+        setPayment({ status: null, data: null });
         setLoading(false);
     };
 
-    /* ─── Show success / failure pages ─── */
-    if (paymentStatus === 'success' && paymentData) {
+    if (payment.status === 'success') {
         return (
             <PaymentSuccess
-                name={paymentData.name}
-                email={paymentData.email}
-                paymentId={paymentData.paymentId}
-                transactionId={paymentData.transactionId}
+                name={payment.data.name}
+                email={payment.data.email}
+                paymentId={payment.data.paymentId}
+                transactionId={payment.data.paymentId}
             />
         );
     }
-    if (paymentStatus === 'failure') {
-        return <PaymentFailure name={paymentData?.name} onRetry={handleRetry} />;
+
+    if (payment.status === 'failure') {
+        return <PaymentFailure name={payment.data?.name} onRetry={handleRetry} />;
     }
 
     /* ─── Main Hero ─── */
