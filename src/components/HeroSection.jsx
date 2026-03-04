@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, Video, Ticket, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
-import PaymentSuccess from './PaymentSuccess';
-import PaymentFailure from './PaymentFailure';
 import { WebinarService } from '../services/webinarService';
 
 const details = [
@@ -43,9 +41,6 @@ const HeroSection = () => {
     const [fields, setFields] = useState(INITIAL);
     const [errors, setErrors] = useState(INITIAL_ERRORS);
     const [loading, setLoading] = useState(false);
-
-    // Consolidated States
-    const [payment, setPayment] = useState({ status: null, data: null }); // status: 'success' | 'failure' | null
     const [tracking, setTracking] = useState({ ip: '', utms: {} });
 
     // Capture Tracking Data (UTMs & IP)
@@ -126,13 +121,20 @@ const HeroSection = () => {
 
                         await WebinarService.registerUser(regPayload);
 
-                        setPayment({
-                            status: 'success',
-                            data: { ...fields, paymentId: response.razorpay_payment_id }
-                        });
+                        sessionStorage.setItem('webinar_success', JSON.stringify({
+                            name: fields.name,
+                            email: fields.email,
+                            paymentId: response.razorpay_payment_id
+                        }));
+                        window.location.href = '/thank-you';
                     } catch (err) {
                         console.error('Registration API Error (Payment was successful):', err);
-                        setPayment({ status: 'success', data: { ...fields, paymentId: response.razorpay_payment_id } });
+                        sessionStorage.setItem('webinar_success', JSON.stringify({
+                            name: fields.name,
+                            email: fields.email,
+                            paymentId: response.razorpay_payment_id
+                        }));
+                        window.location.href = '/thank-you';
                     } finally {
                         setLoading(false);
                     }
@@ -143,30 +145,15 @@ const HeroSection = () => {
             new window.Razorpay(options).open();
 
         } catch (error) {
-            setPayment({ status: 'failure', data: { name: fields.name, error: error.message } });
+            sessionStorage.setItem('webinar_error', JSON.stringify({
+                name: fields.name,
+                error: error.message
+            }));
+            window.location.href = '/error';
             setLoading(false);
         }
     };
 
-    const handleRetry = () => {
-        setPayment({ status: null, data: null });
-        setLoading(false);
-    };
-
-    if (payment.status === 'success') {
-        return (
-            <PaymentSuccess
-                name={payment.data.name}
-                email={payment.data.email}
-                paymentId={payment.data.paymentId}
-                transactionId={payment.data.paymentId}
-            />
-        );
-    }
-
-    if (payment.status === 'failure') {
-        return <PaymentFailure name={payment.data?.name} onRetry={handleRetry} />;
-    }
 
     /* ─── Main Hero ─── */
     return (
