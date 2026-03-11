@@ -111,6 +111,7 @@ const HeroSection = () => {
                     try {
                         const regPayload = {
                             ...payload,
+                            registered_date: new Date().toISOString(),
                             amount: orderData.amount / 100,
                             payment_status: 'paid',
                             razorpay_order_id: response.razorpay_order_id,
@@ -118,7 +119,11 @@ const HeroSection = () => {
                             razorpay_signature: response.razorpay_signature,
                             captured: true
                         };
-
+                        const params = new URLSearchParams();
+                        Object.keys(regPayload).forEach((key) =>
+                            params.append(key, regPayload[key] ?? ""),
+                        );
+                        await handleGoogleSheetForm(params);
                         await WebinarService.registerUser(regPayload);
 
                         sessionStorage.setItem('webinar_success', JSON.stringify({
@@ -154,7 +159,30 @@ const HeroSection = () => {
         }
     };
 
-
+      const handleGoogleSheetForm = async (formData) => {
+    try {
+      const res = await fetch(
+        "https://script.google.com/macros/s/AKfycbyklyVZHhMoav8j43aTIzpKa7fhdW-adH1Ws3j75aGRb1ZJec_UmBZ5fBwLjx6wpQox/exec",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData.toString(),
+        },
+      );
+      console.log(res);
+      const text = await res.text();
+      console.log("Google Sheet Response:", text);
+      if (res.ok) {
+        return true;
+      } else {
+        throw new Error("Sheet responded with non-OK");
+      }
+    } catch (err) {
+      console.error(
+        `Google Sheet attempt failed. Retries left: ${retries}, err `,
+      );
+    }
+  };
     /* ─── Main Hero ─── */
     return (
         <section className="relative w-full overflow-hidden bg-[#0c2b4d]">
